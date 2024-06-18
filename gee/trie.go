@@ -3,10 +3,19 @@ package gee
 import "strings"
 
 type node struct {
-	pattern  string  // 待匹配路由， 例如 /p/:lang
-	part     string  // 路由中的一部分， 例如 :lang
+	pattern  string  // 待匹配路由， 例如 /p/:name
+	part     string  // 路由中的一部分， 例如 :name 整个路由最后结尾的那个字符串
 	children []*node // 子节点， 例如[doc, tutorial intro]
-	isWild   bool    // 是否精确匹配，part 含有: 或 * 是为True
+	isWild   bool    // 是否精确匹配，part 含有: 或 * 是为true
+}
+
+func (n *node) travel(list *[]*node) {
+	if n.pattern != "" {
+		*list = append(*list, n)
+	}
+	for _, child := range n.children {
+		child.travel(list)
+	}
 }
 
 // 第一个匹配成功的节点，用于插入
@@ -37,7 +46,7 @@ func (n *node) insert(patten string, parts []string, height int) {
 	}
 
 	part := parts[height]
-	child := n.matchChild(part) //
+	child := n.matchChild(part) // 第一个节点
 	if child == nil {
 		child = &node{part: part, isWild: part[0] == ':' || part[0] == '*'}
 		n.children = append(n.children, child)

@@ -21,6 +21,7 @@ func parsePattern(pattern string) []string {
 	for _, item := range vs {
 		if item != "" {
 			parts = append(parts, item)
+			// 一个路径只能有一个*
 			if item[0] == '*' {
 				break
 			}
@@ -30,12 +31,16 @@ func parsePattern(pattern string) []string {
 }
 
 func (r *router) addRoute(method string, pattern string, handler HandlerFunc) {
-	log.Printf("Route %4s - %s", method, pattern)
-	parts := parsePattern(pattern)
+	/*
+		method: 方法
+		pattern: 路由
+		handler: 执行的函数
+	*/
+	parts := parsePattern(pattern) // 每个路由所分割的子路由，例如 [hello, :name]
 	key := method + "-" + pattern
-	_, ok := r.roots[method]
+	_, ok := r.roots[method] // 检查是否存在当前键
 	if !ok {
-		r.roots[method] = &node{}
+		r.roots[method] = &node{} // 不存在，添加为空节点
 	}
 	r.roots[method].insert(pattern, parts, 0)
 	r.handlers[key] = handler
@@ -65,10 +70,25 @@ func (r *router) getRoute(method string, path string) (*node, map[string]string)
 	return n, params
 }
 
+func (r *router) getRoutes(method string) []*node {
+	root, ok := r.roots[method]
+	if !ok {
+		return nil
+	}
+	nodes := make([]*node, 0)
+	root.travel(&nodes)
+	return nodes
+}
+
 func (r *router) handle(c *Context) {
-	key := c.Method + "-" + c.Path
-	if handler, ok := r.handlers[key]; ok {
-		handler(c)
+	n, params := r.getRoute(c.Method, c.Path)
+	if n != nil {
+		c.Params = params
+		key := c.Method + "-" + n.pattern // n.pattern 里面存储着原始路由，例如 /hello/:name
+		log.Printf("key = %s\n", key)
+		log.Printf("c = %+v\n", c)
+		log.Printf("r.handlers[key] = %p\n", r.handlers[key])
+		r.handlers[key](c)
 	} else {
 		c.String(http.StatusNotFound, "404 NOT FOUND: %s\n", c.Path)
 	}
