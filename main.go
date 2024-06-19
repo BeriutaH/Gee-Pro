@@ -1,9 +1,22 @@
 package main
 
 import (
+	"fmt"
 	"gee"
+	"html/template"
 	"net/http"
+	"time"
 )
+
+type student struct {
+	Name string
+	Age  int8
+}
+
+func FormatData(t time.Time) string {
+	year, month, day := t.Date()
+	return fmt.Sprintf("%d-%02d-%02d", year, month, day)
+}
 
 func main() {
 	r := gee.New() // 全局共享一个Engine
@@ -29,35 +42,56 @@ func main() {
 	//	})
 	//})
 
-	// 路由组测试
-	r.GET("/index", func(ctx *gee.Context) {
-		ctx.HTML(http.StatusOK, "<h1>Index Page</h1>")
+	//// 路由组测试
+	//r.GET("/index", func(ctx *gee.Context) {
+	//	ctx.HTML(http.StatusOK, "<h1>Index Page</h1>")
+	//})
+	//
+	//v1 := r.Group("/v1")
+	//{
+	//	v1.GET("/", func(ctx *gee.Context) {
+	//		ctx.HTML(http.StatusOK, "<h1>Hello Home</h1>")
+	//	})
+	//	v1.GET("/hello", func(ctx *gee.Context) {
+	//		ctx.HTML(http.StatusOK, "<h1>Hello Gee</h1>")
+	//	})
+	//
+	//}
+	//
+	//v2 := r.Group("/admin")
+	//v2.Use(gee.Logger())
+	//{
+	//	v2.POST("/login", func(ctx *gee.Context) {
+	//		_ = ctx.JSON(http.StatusOK, gee.H{
+	//			"username": ctx.PostForm("username"),
+	//			"password": ctx.PostForm("password"),
+	//		})
+	//	})
+	//	v2.POST("/info/:name", func(ctx *gee.Context) {
+	//		_ = ctx.JSON(http.StatusOK, gee.H{
+	//			"username": ctx.Param("name"),
+	//		})
+	//	})
+	//}
+
+	// 模板测试
+	r.Use(gee.Logger())
+	r.SetFuncMap(template.FuncMap{"FormatData": FormatData})
+	r.LoadHTMLGlob("templates/*")
+	r.Static("/assets", "./static")
+	stu1 := &student{Name: "Beriuta", Age: 40}
+	stu2 := &student{Name: "Jack", Age: 30}
+	r.GET("/", func(ctx *gee.Context) {
+		ctx.HTML(http.StatusOK, "gee.tmpl", nil)
 	})
-
-	v1 := r.Group("/v1")
-	{
-		v1.GET("/", func(ctx *gee.Context) {
-			ctx.HTML(http.StatusOK, "<h1>Hello Home</h1>")
+	r.GET("/students", func(ctx *gee.Context) {
+		ctx.HTML(http.StatusOK, "arr.tmpl", gee.H{"title": "gee", "stuArr": [2]*student{stu1, stu2}})
+	})
+	r.GET("/data", func(ctx *gee.Context) {
+		ctx.HTML(http.StatusOK, "custom_func.tmpl", gee.H{
+			"title": "gee",
+			"now":   time.Date(2024, 6, 17, 13, 23, 48, 0, time.UTC),
 		})
-		v1.GET("/hello", func(ctx *gee.Context) {
-			ctx.HTML(http.StatusOK, "<h1>Hello Gee</h1>")
-		})
-
-	}
-
-	v2 := r.Group("/admin")
-	{
-		v2.POST("/login", func(ctx *gee.Context) {
-			_ = ctx.JSON(http.StatusOK, gee.H{
-				"username": ctx.PostForm("username"),
-				"password": ctx.PostForm("password"),
-			})
-		})
-		v2.POST("/info/:name", func(ctx *gee.Context) {
-			_ = ctx.JSON(http.StatusOK, gee.H{
-				"username": ctx.Param("name"),
-			})
-		})
-	}
+	})
 	r.Run(":9999")
 }

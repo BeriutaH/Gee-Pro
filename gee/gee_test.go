@@ -1,6 +1,8 @@
 package gee
 
-import "testing"
+import (
+	"testing"
+)
 
 // go test -v ./gee -run TestNestedGroup
 
@@ -18,4 +20,11 @@ func TestNestedGroup(t *testing.T) {
 
 	}
 	t.Logf("v3 完整路由为: %s", v3.prefix)
+}
+
+// 测试文件路由
+func TestStaticPath(t *testing.T) {
+	r := New()
+	r.Static("/assets", "./static")
+	r.Run(":9999")
 }

@@ -18,6 +18,11 @@ type Context struct {
 	Params map[string]string
 	// 响应信息
 	StatusCode int
+	// 中间件信息
+	handlers []HandlerFunc
+	index    int // 记录当前执行到第几个中间件
+	// engine 指针
+	engine *Engine
 }
 
 func newContext(w http.ResponseWriter, r *http.Request) *Context {
@@ -26,7 +31,21 @@ func newContext(w http.ResponseWriter, r *http.Request) *Context {
 		Req:    r,
 		Path:   r.URL.Path,
 		Method: r.Method,
+		index:  -1,
 	}
+}
+
+func (c *Context) Next() {
+	// 循环调用剩余的处理函数
+	for c.index++; c.index < len(c.handlers); c.index++ {
+		// 执行当前索引指向的处理函数，传入 Context 自身, 之所以循环执行是因为并不是所有的中间件都会调用Next()
+		c.handlers[c.index](c)
+	}
+}
+
+func (c *Context) Fail(code int, err string) {
+	c.index = len(c.handlers)
+	c.JSON(code, H{"message": err})
 }
 
 func (c *Context) Param(key string) string {
@@ -70,8 +89,15 @@ func (c *Context) Data(code int, data []byte) {
 	c.Writer.Write(data)
 }
 
-func (c *Context) HTML(code int, html string) {
+func (c *Context) HTML(code int, name string, data any) {
+	/*
+		code: 返回状态
+		name: 所执行的模板名称
+		data: 传递给模板的数据
+	*/
 	c.SetHeader("Content-Type", "text/html")
 	c.Status(code)
-	c.Writer.Write([]byte(html))
+	if err := c.engine.htmlTemplate.ExecuteTemplate(c.Writer, name, data); err != nil {
+		c.Fail(500, err.Error())
+	}
 }

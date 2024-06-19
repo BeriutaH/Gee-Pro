@@ -1,7 +1,6 @@
 package gee
 
 import (
-	"log"
 	"net/http"
 	"strings"
 )
@@ -84,12 +83,13 @@ func (r *router) handle(c *Context) {
 	n, params := r.getRoute(c.Method, c.Path)
 	if n != nil {
 		c.Params = params
-		key := c.Method + "-" + n.pattern // n.pattern 里面存储着原始路由，例如 /hello/:name
-		log.Printf("key = %s\n", key)
-		log.Printf("c = %+v\n", c)
-		log.Printf("r.handlers[key] = %p\n", r.handlers[key])
-		r.handlers[key](c)
+		key := c.Method + "-" + n.pattern                // n.pattern 里面存储着原始路由，例如 /hello/:name
+		c.handlers = append(c.handlers, r.handlers[key]) // 将从路由匹配得到的 Handler 添加到 c.handlers列表中
 	} else {
-		c.String(http.StatusNotFound, "404 NOT FOUND: %s\n", c.Path)
+		c.handlers = append(c.handlers, func(ctx *Context) {
+			c.String(http.StatusNotFound, "404 NOT FOUND: %s\n", c.Path)
+		})
 	}
+	// 调用Next，执行中间件内的方法
+	c.Next()
 }
