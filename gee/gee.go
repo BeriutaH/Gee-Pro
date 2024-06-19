@@ -39,6 +39,13 @@ func New() *Engine {
 	return engine
 }
 
+// Default 默认使用 Logger() 和 Recovery 中间件
+func Default() *Engine {
+	engine := New()
+	engine.Use(Logger(), Recovery())
+	return engine
+}
+
 func (e *Engine) Run(addr string) (err error) {
 	return http.ListenAndServe(addr, e)
 }
