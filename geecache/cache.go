@@ -8,6 +8,8 @@ import (
 )
 
 type cache struct {
+	// 之所以不用读写锁 cache 的 get 和 add 都涉及到写操作(LRU 将最近访问元素移动到链表头)，所以不能直接改为读写锁
+	//如果 cache 侧和 LRU 侧同时使用锁细颗粒度控制，是有优化空间的，可以尝试下
 	mu         sync.Mutex
 	lru        *lru.Cache
 	cacheBytes int64

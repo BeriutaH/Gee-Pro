@@ -49,7 +49,7 @@ func NewGroup(name string, cacheBytes int64, getter Getter) *Group {
 
 // GetGroup 返回先前使用 NewGroup 创建的命名组，如果不存在这样的组，则返回 nil
 func GetGroup(name string) *Group {
-	mu.RLock() // 只读锁
+	mu.RLock() // 只读锁，读的本质也是并发的操作map，如果不加锁，并发量大可能会panic
 	defer mu.RUnlock()
 	g := groups[name]
 	return g
