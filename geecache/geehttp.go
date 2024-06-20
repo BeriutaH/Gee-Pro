@@ -33,7 +33,7 @@ func (p *HTTPPool) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if !strings.HasPrefix(r.URL.Path, p.basePath) {
 		panic("HTTPPool serving unexpected path: " + r.URL.Path)
 	}
-	p.Log("%s %s", r.Method, &r.URL.Path)
+	p.Log("%s %s", r.Method, r.URL.Path)
 	// /<basepath>/<groupname>/<key>  将结果按"/"进行分割，最多分割成2部分
 	parts := strings.SplitN(r.URL.Path[len(p.basePath):], "/", 2)
 
