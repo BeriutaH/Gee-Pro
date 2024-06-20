@@ -1,6 +1,9 @@
 package lru
 
-import "container/list"
+import (
+	"container/list"
+	"fmt"
+)
 
 type Value interface {
 	Len() int
@@ -46,6 +49,7 @@ func (c *Cache) Get(key string) (Value Value, ok bool) {
 
 // RemoveOldest 移除最近最少访问的节点（队首）
 func (c *Cache) RemoveOldest() {
+	fmt.Println("调用移除")
 	ele := c.ll.Back() // 取到队首节点，从链表中删除
 	if ele != nil {
 		c.ll.Remove(ele)
