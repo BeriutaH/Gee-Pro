@@ -8,6 +8,11 @@ import (
 
 // 负责与外部交互，控制缓存存储和获取的主流程
 
+var (
+	mu     sync.RWMutex
+	groups = make(map[string]*Group)
+)
+
 // Getter 根据某个键加载数据
 type Getter interface {
 	Get(key string) ([]byte, error)
@@ -24,12 +29,8 @@ type Group struct {
 	name      string
 	getter    Getter
 	mainCache cache
+	peers     PeerPicker
 }
-
-var (
-	mu     sync.RWMutex
-	groups = make(map[string]*Group)
-)
 
 // NewGroup 是 Group 的构造函数
 func NewGroup(name string, cacheBytes int64, getter Getter) *Group {
@@ -71,6 +72,16 @@ func (g *Group) Get(key string) (ByteView, error) {
 }
 
 func (g *Group) load(key string) (value ByteView, err error) {
+	if g.peers != nil {
+		// 使用 PickPeer 方法选择节点，若非本机节点，则调用 getFromPeer 从远程获取
+		if peer, ok := g.peers.PickPeer(key); ok {
+			if value, err = g.getFromPeer(peer, key); err == nil {
+				return value, nil
+			}
+			log.Println("GeeCache] 从对端获取失败", err)
+		}
+	}
+	// 若是本机节点或失败，则回退到 getLocally
 	return g.getLocally(key)
 }
 
@@ -86,4 +97,21 @@ func (g *Group) getLocally(key string) (ByteView, error) {
 
 func (g *Group) populateCache(key string, value ByteView) {
 	g.mainCache.add(key, value) // cache 添加到并发缓存
+}
+
+// RegisterPeer 注册一个 PeerPicker 来选择远程对等体
+func (g *Group) RegisterPeer(peers PeerPicker) {
+	if g.peers != nil {
+		panic("RegisterPeerPicker called more than once")
+	}
+	g.peers = peers
+}
+
+// getFromPeer 使用实现了 PeerGetter 接口的 httpGetter 从访问远程节点，获取缓存值。
+func (g *Group) getFromPeer(peer PeerGetter, key string) (ByteView, error) {
+	bytes, err := peer.Get(g.name, key)
+	if err != nil {
+		return ByteView{}, err
+	}
+	return ByteView{b: bytes}, err
 }
