@@ -104,7 +104,7 @@ type httpGetter struct {
 
 func (h *httpGetter) Get(group, key string) ([]byte, error) {
 	u := fmt.Sprintf("%v%v/%v", h.baseURL, url.QueryEscape(group), url.QueryEscape(key))
-	res, err := http.Get(u)
+	res, err := http.Get(u) // 从 ServeHTTP
 	if err != nil {
 		return nil, err
 	}

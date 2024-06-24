@@ -1,6 +1,7 @@
 package geecache
 
 import (
+	"GeeCache/geecache/singleflight"
 	"fmt"
 	"log"
 	"sync"
@@ -30,6 +31,8 @@ type Group struct {
 	getter    Getter
 	mainCache cache
 	peers     PeerPicker
+	// 使用 singleflight.Group 确保每个键仅被获取一次
+	loader *singleflight.Group
 }
 
 // NewGroup 是 Group 的构造函数
@@ -43,6 +46,7 @@ func NewGroup(name string, cacheBytes int64, getter Getter) *Group {
 		name:      name,                          // 缓存的命名空间, 每个 Group 拥有一个唯一的名称 name
 		getter:    getter,                        // 缓存未命中时获取源数据的回调
 		mainCache: cache{cacheBytes: cacheBytes}, // 并发缓存
+		loader:    &singleflight.Group{},
 	}
 	groups[name] = g
 	return g
@@ -72,17 +76,24 @@ func (g *Group) Get(key string) (ByteView, error) {
 }
 
 func (g *Group) load(key string) (value ByteView, err error) {
-	if g.peers != nil {
-		// 使用 PickPeer 方法选择节点，若非本机节点，则调用 getFromPeer 从远程获取
-		if peer, ok := g.peers.PickPeer(key); ok {
-			if value, err = g.getFromPeer(peer, key); err == nil {
-				return value, nil
+	// 每个密钥仅被获取一次（本地或远程,无论并发调用者的数量是多少）
+	view, err := g.loader.Do(key, func() (any, error) {
+		if g.peers != nil {
+			// 使用 PickPeer 方法选择节点，若非本机节点，则调用 getFromPeer 从远程获取
+			if peer, ok := g.peers.PickPeer(key); ok {
+				if value, err = g.getFromPeer(peer, key); err == nil {
+					return value, nil
+				}
+				log.Println("GeeCache] 从对端获取失败", err)
 			}
-			log.Println("GeeCache] 从对端获取失败", err)
 		}
+		// 若是本机节点或失败，则回退到 getLocally
+		return g.getLocally(key)
+	})
+	if err == nil {
+		return view.(ByteView), nil
 	}
-	// 若是本机节点或失败，则回退到 getLocally
-	return g.getLocally(key)
+	return
 }
 
 func (g *Group) getLocally(key string) (ByteView, error) {
