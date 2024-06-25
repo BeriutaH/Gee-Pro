@@ -2,7 +2,9 @@ package geecache
 
 import (
 	"GeeCache/geecache/consistenthash"
+	pb "GeeCache/geecache/geecachepb"
 	"fmt"
+	"github.com/golang/protobuf/proto"
 	"io"
 	"log"
 	"net/http"
@@ -92,31 +94,44 @@ func (p *HTTPPool) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	body, err := proto.Marshal(&pb.Response{Value: view.ByteSlice()})
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 	// application/octet-stream 通用的二进制数据类型，表示响应体是未解释的二进制数据
 	// 浏览器和其他客户端通常会将这样的内容视为文件进行下载，而不是直接显示
 	w.Header().Set("Content-Type", "application/octet-stream")
-	w.Write(view.ByteSlice()) // 将获取的缓存数据返回
+	w.Write(body) // 将获取的缓存数据返回
 }
 
 type httpGetter struct {
 	baseURL string
 }
 
-func (h *httpGetter) Get(group, key string) ([]byte, error) {
-	u := fmt.Sprintf("%v%v/%v", h.baseURL, url.QueryEscape(group), url.QueryEscape(key))
+func (h *httpGetter) Get(in *pb.Request, out *pb.Response) error {
+	u := fmt.Sprintf(
+		"%v%v/%v",
+		h.baseURL,
+		url.QueryEscape(in.GetGroup()),
+		url.QueryEscape(in.GetKey()),
+	)
 	res, err := http.Get(u) // 从 ServeHTTP
 	if err != nil {
-		return nil, err
+		return err
 	}
 	defer res.Body.Close()
 	if res.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("服务端状态码: %v", res.Status)
+		return fmt.Errorf("服务端状态码: %v", res.Status)
 	}
 	bytes, err := io.ReadAll(res.Body)
 	if err != nil {
-		return nil, fmt.Errorf("正在读取响应主体: %v", err)
+		return fmt.Errorf("正在读取响应主体: %v", err)
 	}
-	return bytes, nil
+	if err = proto.Unmarshal(bytes, out); err != nil {
+		return fmt.Errorf("解码响应主体: %v", err)
+	}
+	return nil
 }
 
 var _ PeerGetter = (*httpGetter)(nil) // 检测 httpGetter 是否实现 PeerGetter 接口所有的方法

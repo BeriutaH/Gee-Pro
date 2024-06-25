@@ -1,0 +1,25 @@
+syntax = "proto3";
+
+option go_package = "GeeCache/geecache/geecachepb";  // 指定生成的Go代码在你项目中的导入路径
+
+package geecachepb;
+
+service GroupCache {
+  rpc Get(Request) returns (Response);
+}
+
+message Request {
+  string group = 1;
+  string key = 2;
+}
+
+message Response {
+  bytes value = 1;
+}
+
+//protoc --go_out=. --go_opt=paths=source_relative \
+//--go-grpc_out=. --go-grpc_opt=paths=source_relative \
+//geecache/geecachepb/geecachepb.proto
+
+
+
