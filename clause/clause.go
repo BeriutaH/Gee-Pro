@@ -1,6 +1,8 @@
 package clause
 
-import "strings"
+import (
+	"strings"
+)
 
 type Type int
 
@@ -11,6 +13,9 @@ const (
 	LIMIT
 	WHERE
 	ORDERBY
+	UPDATE
+	DELETE
+	COUNT
 )
 
 type Clause struct {
@@ -41,5 +46,7 @@ func (c *Clause) Build(orders ...Type) (string, []any) {
 			vars = append(vars, c.sqlVars[order]...)
 		}
 	}
+	//log.Printf("sqlInfo>>>> %+v", sqlInfo)
+	//log.Printf("vars>>>> %+v", vars)
 	return strings.Join(sqlInfo, " "), vars
 }

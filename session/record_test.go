@@ -42,3 +42,37 @@ func TestSession_Find(t *testing.T) {
 	}
 	log.Println(users)
 }
+
+func TestSession_Limit(t *testing.T) {
+	s := testRecordInit(t)
+	var users []User
+	err := s.Limit(1).Find(&users)
+	if err != nil || len(users) != 1 {
+		log.Println("查询一条信息失败")
+	}
+	log.Printf("用户列表: %+v\n", users)
+}
+
+func TestSession_Update(t *testing.T) {
+	s := testRecordInit(t)
+	affected, err := s.Where("Name = ?", "Tom").Update("Age", 30)
+	if err != nil {
+		log.Println(err)
+	}
+	u := &User{}
+	_ = s.OrderBy("Age DESC").First(u)
+	if affected != 1 || u.Age != 30 {
+		log.Println("修改信息失败")
+	}
+	log.Printf("用户信息: %+v\n", u)
+}
+
+func TestSession_DeleteAndCount(t *testing.T) {
+	s := testRecordInit(t)
+	affected, _ := s.Where("Name = ?", "Tom").Delete()
+	count, _ := s.Count()
+	if affected != 1 || count != 1 {
+		log.Println("删除信息失败")
+	}
+
+}

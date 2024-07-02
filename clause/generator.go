@@ -17,6 +17,9 @@ func init() {
 	generators[LIMIT] = _limit
 	generators[WHERE] = _where
 	generators[ORDERBY] = _orderBy
+	generators[UPDATE] = _update
+	generators[DELETE] = _delete
+	generators[COUNT] = _count
 }
 
 func getBindVars(num int) string {
@@ -25,6 +28,29 @@ func getBindVars(num int) string {
 		vars = append(vars, "?")
 	}
 	return strings.Join(vars, ", ")
+}
+
+// 删除表
+func _delete(values ...any) (string, []any) {
+	return fmt.Sprintf("DELETE FROM %s", values[0]), []any{}
+}
+
+func _count(values ...any) (string, []any) {
+	return _select(values[0], []string{"count(*)"})
+}
+
+func _update(values ...any) (string, []any) {
+	tableName := values[0]
+	m := values[1].(map[string]any)
+	var (
+		keys []string
+		vars []any
+	)
+	for k, v := range m {
+		keys = append(keys, k+" = ?")
+		vars = append(vars, v)
+	}
+	return fmt.Sprintf("UPDATE %s SET %s", tableName, strings.Join(keys, ", ")), vars
 }
 
 func _orderBy(values ...any) (string, []any) {

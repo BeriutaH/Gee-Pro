@@ -2,6 +2,7 @@ package session
 
 import (
 	"GeeORM/clause"
+	"errors"
 	"log"
 	"reflect"
 )
@@ -55,4 +56,75 @@ func (s *Session) Find(values any) error {
 		destSlice.Set(reflect.Append(destSlice, dest))
 	}
 	return rows.Close()
+}
+
+func (s *Session) Update(kv ...any) (int64, error) {
+	// 平铺开来的键值对和 map 类型的键值对
+	m, ok := kv[0].(map[string]any)
+	if !ok {
+		m = make(map[string]any)
+		for i := 0; i < len(kv); i += 2 {
+			m[kv[i].(string)] = kv[i+1]
+		}
+	}
+	s.clause.Set(clause.UPDATE, s.RefTable().Name, m)
+	sql, vars := s.clause.Build(clause.UPDATE, clause.WHERE)
+	log.Println(sql)
+	result, err := s.Raw(sql, vars...).Exec()
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+func (s *Session) Delete() (int64, error) {
+	s.clause.Set(clause.DELETE, s.RefTable().Name)
+	sql, vars := s.clause.Build(clause.DELETE, clause.WHERE)
+	result, err := s.Raw(sql, vars...).Exec()
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+func (s *Session) Count() (int64, error) {
+	s.clause.Set(clause.COUNT, s.RefTable().Name)
+	sql, vars := s.clause.Build(clause.COUNT, clause.WHERE)
+	row := s.Raw(sql, vars...).QueryRow()
+	var temp int64
+	if err := row.Scan(&temp); err != nil {
+		return 0, err
+	}
+	return temp, nil
+}
+
+func (s *Session) Limit(num int) *Session {
+	s.clause.Set(clause.LIMIT, num)
+	return s
+}
+
+func (s *Session) Where(desc string, args ...any) *Session {
+	var vars []any
+	s.clause.Set(clause.WHERE, append(append(vars, desc), args...)...)
+	return s
+}
+
+func (s *Session) OrderBy(desc string) *Session {
+	s.clause.Set(clause.ORDERBY, desc)
+	return s
+}
+
+func (s *Session) First(value any) error {
+	// 获取value的反射值，并确保它是指针类型，解除指针引用
+	dest := reflect.Indirect(reflect.ValueOf(value))
+	// SliceOf 创建一个 User 类型的切片类型，New 创建切片的实例，Elem 获取反射值
+	destSlice := reflect.New(reflect.SliceOf(dest.Type())).Elem()
+	if err := s.Limit(1).Find(destSlice.Addr().Interface()); err != nil {
+		return err
+	}
+	if destSlice.Len() == 0 {
+		return errors.New("NOT FOUND")
+	}
+	dest.Set(destSlice.Index(0))
+	return nil
 }
