@@ -24,6 +24,15 @@ func (schema *Schema) GetField(name string) *Field {
 	return schema.fieldMap[name]
 }
 
+func (schema *Schema) RecordValues(dest any) []any {
+	destValue := reflect.Indirect(reflect.ValueOf(dest))
+	var fieldValues []any
+	for _, field := range schema.Fields {
+		fieldValues = append(fieldValues, destValue.FieldByName(field.Name).Interface())
+	}
+	return fieldValues
+}
+
 // Parse 将任意对象解析为Schema实例
 func Parse(dest any, d dialect.Dialect) *Schema {
 	// ValueOf 返回入参的值，返回的是一个对象的指针

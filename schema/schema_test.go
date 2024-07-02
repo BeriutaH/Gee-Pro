@@ -13,7 +13,7 @@ type User struct {
 var TestDial, _ = dialect.GetDialect("sqlite3")
 
 func TestParse(t *testing.T) {
-	schema := Parse(&User{}, TestDial)
+	schema := Parse(&User{Name: "Jack", Age: 33}, TestDial)
 	if schema.Name != "User" || len(schema.Fields) != 2 {
 		t.Fatal("User结构体解析失败")
 	}
