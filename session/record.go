@@ -11,6 +11,7 @@ import (
 func (s *Session) Insert(values ...any) (int64, error) {
 	recordValues := make([]any, 0)
 	for _, value := range values {
+		s.CallMethod(BeforeInsert, value)
 		table := s.Model(value).RefTable() // 将结构体转化成表对象
 		// 多次调用 clause.Set() 构造好每一个子句
 		s.clause.Set(clause.INSERT, table.Name, table.FieldNames)
@@ -27,6 +28,7 @@ func (s *Session) Insert(values ...any) (int64, error) {
 }
 
 func (s *Session) Find(values any) error {
+	s.CallMethod(BeforeQuery, nil)
 	destSlice := reflect.Indirect(reflect.ValueOf(values)) // 将切片转换为reflect.Value
 	// destSlice.Type().Elem() 获取切片的单个元素的类型
 	destType := destSlice.Type().Elem()
@@ -46,13 +48,14 @@ func (s *Session) Find(values any) error {
 		dest := reflect.New(destType).Elem() // reflect.New(destType) 创建了一个指针，则 Elem() 方法返回该指针指向的变量
 		var values []any
 		for _, name := range table.FieldNames {
-			// dest.FieldByName(name).Addr().Interface() 获取name字段的指针，指针地址不是重复的
+			// dest.FieldByName(name).Addr().Interface() 获取name字段, Addr()获取指针，指针地址不是重复的
 			values = append(values, dest.FieldByName(name).Addr().Interface())
 		}
 		// Scan 将该行记录每一列的值依次赋值给 values 中的每一个字段，例如 err = rows.Scan(&id, &name, &age)
 		if err := rows.Scan(values...); err != nil {
 			return err
 		}
+		s.CallMethod(AfterQuery, dest.Addr().Interface())
 		destSlice.Set(reflect.Append(destSlice, dest))
 	}
 	return rows.Close()

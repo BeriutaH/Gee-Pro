@@ -1,7 +1,7 @@
 package main
 
 import (
-	geeorm "GeeORM"
+	"database/sql"
 	_ "github.com/mattn/go-sqlite3" // 导入时会注册 sqlite3 的驱动
 	"log"
 )
@@ -38,14 +38,28 @@ func main() {
 	//if err = row.Scan(&name); err == nil {
 	//	log.Println(name)
 	//}
-	engine, _ := geeorm.NewEngine("sqlite3", "gee.db")
-	defer engine.Close()
-	s := engine.NewSession()
-	_, _ = s.Raw("DROP TABLE IF EXISTS User;").Exec()
-	_, _ = s.Raw("CREATE TABLE User(Name text);").Exec()
-	_, _ = s.Raw("CREATE TABLE User(Name text);").Exec()
-	result, _ := s.Raw("INSERT INTO User(`Name`) values (?), (?)", "Tom", "Sam").Exec()
-	count, _ := result.RowsAffected()
-	log.Printf("执行成功, %d 条受影响\n", count)
+	//engine, _ := geeorm.NewEngine("sqlite3", "gee.db")
+	//defer engine.Close()
+	//s := engine.NewSession()
+	//_, _ = s.Raw("DROP TABLE IF EXISTS User;").Exec()
+	//_, _ = s.Raw("CREATE TABLE User(Name text);").Exec()
+	//_, _ = s.Raw("CREATE TABLE User(Name text);").Exec()
+	//result, _ := s.Raw("INSERT INTO User(`Name`) values (?), (?)", "Tom", "Sam").Exec()
+	//count, _ := result.RowsAffected()
+	//log.Printf("执行成功, %d 条受影响\n", count)
+	db, _ := sql.Open("sqlite3", "gee.db")
+	defer func() { _ = db.Close() }()
+	_, _ = db.Exec("CREATE TABLE IF NOT EXISTS User(`Name` text);")
+
+	tx, _ := db.Begin()
+	_, err1 := tx.Exec("INSERT INTO User(`Name`) VALUES (?)", "Tom")
+	_, err2 := tx.Exec("INSERT INTO User(`Name`) VALUES (?)", "Jack")
+	if err1 != nil || err2 != nil {
+		_ = tx.Rollback()
+		log.Println("Rollback", err1, err2)
+	} else {
+		_ = tx.Commit()
+		log.Println("Commit")
+	}
 
 }

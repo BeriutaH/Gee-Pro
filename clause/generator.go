@@ -10,16 +10,17 @@ type generator func(values ...any) (string, []any)
 var generators map[Type]generator
 
 func init() {
-	generators = make(map[Type]generator)
-	generators[INSERT] = _insert
-	generators[VALUES] = _values
-	generators[SELECT] = _select
-	generators[LIMIT] = _limit
-	generators[WHERE] = _where
-	generators[ORDERBY] = _orderBy
-	generators[UPDATE] = _update
-	generators[DELETE] = _delete
-	generators[COUNT] = _count
+	generators = map[Type]generator{
+		INSERT:  _insert,
+		VALUES:  _values,
+		SELECT:  _select,
+		LIMIT:   _limit,
+		WHERE:   _where,
+		ORDERBY: _orderBy,
+		UPDATE:  _update,
+		DELETE:  _delete,
+		COUNT:   _count,
+	}
 }
 
 func getBindVars(num int) string {
