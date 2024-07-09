@@ -9,11 +9,22 @@ import (
 	"strings"
 )
 
+type CommonDB interface {
+	Query(query string, args ...any) (*sql.Rows, error)
+	QueryRow(query string, args ...any) *sql.Row
+	Exec(query string, args ...any) (sql.Result, error)
+}
+
+// 确保 *sql.DB 和 *sql.Tx 类型实现了 CommonDB 接口
+var _ CommonDB = (*sql.DB)(nil)
+var _ CommonDB = (*sql.Tx)(nil)
+
 type Session struct {
 	db       *sql.DB // 用 sql.Open() 方法连接数据库成功之后返回的指针
 	dialect  dialect.Dialect
+	tx       *sql.Tx        // 事务，如果有就执行事务，如果没有就执行sql
 	refTable *schema.Schema // 表对象
-	clause   clause.Clause
+	clause   clause.Clause  // sql语句操作方法
 	// 用户调用 Raw() 方法即可改变这两个变量的值
 	sql     strings.Builder // 拼接 SQL 语句 使用 strings.Builder 避免每次修改其实都要重新申请一个内存空间
 	sqlVars []any           // SQL 语句中占位符的对应值
@@ -33,7 +44,10 @@ func (s *Session) Clear() {
 	s.clause = clause.Clause{} // 将 clause 对象重置为空
 }
 
-func (s *Session) DB() *sql.DB {
+func (s *Session) DB() CommonDB {
+	if s.tx != nil {
+		return s.tx
+	}
 	return s.db
 }
 

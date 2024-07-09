@@ -47,19 +47,33 @@ func main() {
 	//result, _ := s.Raw("INSERT INTO User(`Name`) values (?), (?)", "Tom", "Sam").Exec()
 	//count, _ := result.RowsAffected()
 	//log.Printf("执行成功, %d 条受影响\n", count)
-	db, _ := sql.Open("sqlite3", "gee.db")
-	defer func() { _ = db.Close() }()
-	_, _ = db.Exec("CREATE TABLE IF NOT EXISTS User(`Name` text);")
 
-	tx, _ := db.Begin()
+	//db, _ := sql.Open("sqlite3", "gee.db")
+	//defer func() { _ = db.Close() }()
+	//_, _ = db.Exec("CREATE TABLE IF NOT EXISTS User(`Name` text);")
+	//
+	//tx, _ := db.Begin()
+	//_, err1 := tx.Exec("INSERT INTO User(`Name`) VALUES (?)", "Tom")
+	//_, err2 := tx.Exec("INSERT INTO User(`Name`) VALUES (?)", "Jack")
+	//if err1 != nil || err2 != nil {
+	//	_ = tx.Rollback()
+	//	log.Println("Rollback", err1, err2)
+	//} else {
+	//	_ = tx.Commit()
+	//	log.Println("Commit")
+	//}
+
+	db, _ := sql.Open("sqlite3", "gee.db")
+	defer db.Close()
+	_, _ = db.Exec("CREATE TABLE IF NOT EXISTS User(`Name` text);")
+	tx, _ := db.Begin() // 开启事务
 	_, err1 := tx.Exec("INSERT INTO User(`Name`) VALUES (?)", "Tom")
 	_, err2 := tx.Exec("INSERT INTO User(`Name`) VALUES (?)", "Jack")
 	if err1 != nil || err2 != nil {
 		_ = tx.Rollback()
 		log.Println("Rollback", err1, err2)
 	} else {
-		_ = tx.Commit()
-		log.Println("Commit")
+		_ = tx.Commit() // 提交
+		log.Println("Commit!!")
 	}
-
 }

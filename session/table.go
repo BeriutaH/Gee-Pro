@@ -40,6 +40,7 @@ func (s *Session) DropTable() error {
 	return err
 }
 
+// HasTable 检查某个表是否存在于数据库中
 func (s *Session) HasTable() bool {
 	sql, values := s.dialect.TableExistSQL(s.RefTable().Name)
 	row := s.Raw(sql, values...).QueryRow()
