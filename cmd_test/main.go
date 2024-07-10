@@ -9,19 +9,19 @@ import (
 func main() {
 	//db, err := sql.Open("sqlite3", "gee.db") // 返回一个 sql.DB 实例的指针
 	//if err != nil {
-	//	log.Println("链接数据库错误: ", err)
+	//	logger.Println("链接数据库错误: ", err)
 	//}
 	////defer db.Close()
 	//defer func() { _ = db.Close() }()
 	//_, err = db.Exec("DROP TABLE IF EXISTS User;")
 	//if err != nil {
-	//	log.Println("删除表格错误: ", err)
+	//	logger.Println("删除表格错误: ", err)
 	//	return
 	//}
 	//
 	//_, err = db.Exec("CREATE TABLE User(Name text);")
 	//if err != nil {
-	//	log.Println("创建表格错误: ", err)
+	//	logger.Println("创建表格错误: ", err)
 	//	return
 	//}
 	//
@@ -30,13 +30,13 @@ func main() {
 	//result, err := db.Exec("INSERT INTO User(`Name`) values (?), (?)", "Tom", "Sam")
 	//if err == nil {
 	//	affected, _ := result.RowsAffected()
-	//	log.Println(affected)
+	//	logger.Println(affected)
 	//}
 	//// Query() 和 QueryRow()，前者可以返回多条记录，后者只返回一条记录
 	//row := db.QueryRow("SELECT Name FROM User LIMIT 1")
 	//var name string
 	//if err = row.Scan(&name); err == nil {
-	//	log.Println(name)
+	//	logger.Println(name)
 	//}
 	//engine, _ := geeorm.NewEngine("sqlite3", "gee.db")
 	//defer engine.Close()
@@ -46,7 +46,7 @@ func main() {
 	//_, _ = s.Raw("CREATE TABLE User(Name text);").Exec()
 	//result, _ := s.Raw("INSERT INTO User(`Name`) values (?), (?)", "Tom", "Sam").Exec()
 	//count, _ := result.RowsAffected()
-	//log.Printf("执行成功, %d 条受影响\n", count)
+	//logger.Printf("执行成功, %d 条受影响\n", count)
 
 	//db, _ := sql.Open("sqlite3", "gee.db")
 	//defer func() { _ = db.Close() }()
@@ -57,10 +57,10 @@ func main() {
 	//_, err2 := tx.Exec("INSERT INTO User(`Name`) VALUES (?)", "Jack")
 	//if err1 != nil || err2 != nil {
 	//	_ = tx.Rollback()
-	//	log.Println("Rollback", err1, err2)
+	//	logger.Println("Rollback", err1, err2)
 	//} else {
 	//	_ = tx.Commit()
-	//	log.Println("Commit")
+	//	logger.Println("Commit")
 	//}
 
 	db, _ := sql.Open("sqlite3", "gee.db")

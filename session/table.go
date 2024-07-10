@@ -1,7 +1,7 @@
 package session
 
 import (
-	"GeeORM/log"
+	"GeeORM/logger"
 	"GeeORM/schema"
 	"fmt"
 	"reflect"
@@ -19,7 +19,7 @@ func (s *Session) Model(value any) *Session {
 // RefTable 返回 refTable 的值
 func (s *Session) RefTable() *schema.Schema {
 	if s.refTable == nil {
-		log.Error("未设置模型")
+		logger.Error("未设置模型")
 	}
 	return s.refTable
 }

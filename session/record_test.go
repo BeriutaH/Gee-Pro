@@ -74,5 +74,6 @@ func TestSession_DeleteAndCount(t *testing.T) {
 	if affected != 1 || count != 1 {
 		log.Println("删除信息失败")
 	}
-
 }
+
+// go test -v ./session -run TestSession_Limit

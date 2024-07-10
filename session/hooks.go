@@ -1,7 +1,7 @@
 package session
 
 import (
-	"GeeORM/log"
+	"GeeORM/logger"
 	"reflect"
 )
 
@@ -55,7 +55,7 @@ func (s *Session) CallMethod(method string, value any) {
 		// 返回一个 []reflect.Value 类型的切片
 		if v := fm.Call(param); len(v) > 0 {
 			if err, ok := v[0].Interface().(error); ok {
-				log.Error(err)
+				logger.Error(err)
 			}
 		}
 	}
@@ -66,7 +66,7 @@ func (s *Session) CallMethod(method string, value any) {
 	//call := func(i interface{}) {
 	//	if err := reflect.ValueOf(i).MethodByName(method).Call([]reflect.Value{reflect.ValueOf(s)})[0].Interface(); err != nil {
 	//		if e, ok := err.(error); ok && e != nil {
-	//			log.Error(e)
+	//			logger.Error(e)
 	//		}
 	//	}
 	//}

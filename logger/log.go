@@ -1,4 +1,4 @@
-package log
+package logger
 
 import (
 	"io"
@@ -8,7 +8,7 @@ import (
 )
 
 var (
-	// log.Lshortfile 支持显示文件名和代码行号
+	// logger.Lshortfile 支持显示文件名和代码行号
 	errorLog = log.New(os.Stdin, "\033[31m[error]\033[0m", log.LstdFlags|log.Llongfile)
 	infoLog  = log.New(os.Stdin, "\033[34m[info ]\033[0m", log.LstdFlags|log.Llongfile)
 	loggers  = []*log.Logger{errorLog, infoLog}
@@ -22,7 +22,7 @@ var (
 	InfoF  = infoLog.Printf
 )
 
-// log levels
+// logger levels
 const (
 	InfoLevel = iota
 	ErrorLevel

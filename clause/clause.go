@@ -46,7 +46,7 @@ func (c *Clause) Build(orders ...Type) (string, []any) {
 			vars = append(vars, c.sqlVars[order]...)
 		}
 	}
-	//log.Printf("sqlInfo>>>> %+v", sqlInfo)
-	//log.Printf("vars>>>> %+v", vars)
+	//logger.Printf("sqlInfo>>>> %+v", sqlInfo)
+	//logger.Printf("vars>>>> %+v", vars)
 	return strings.Join(sqlInfo, " "), vars
 }

@@ -1,10 +1,12 @@
 package geeorm
 
 import (
+	"GeeORM/logger"
 	"GeeORM/session"
 	"errors"
 	_ "github.com/mattn/go-sqlite3"
 	"log"
+	"reflect"
 	"testing"
 )
 
@@ -66,6 +68,28 @@ func TestEngine_Transaction(t *testing.T) {
 	t.Run("commit", func(t *testing.T) {
 		transactionCommit(t)
 	})
+}
+
+func TestEngine_Migrate(t *testing.T) {
+	logger.SetLevel(logger.InfoLevel)
+	engine := OpenDB(t)
+	defer engine.Close()
+	s := engine.NewSession()
+	_, _ = s.Raw("DROP TABLE IF EXISTS User;").Exec()
+	_, _ = s.Raw("CREATE TABLE User(Name text PRIMARY KEY, XXX integer);").Exec()
+	_, _ = s.Raw("INSERT INTO User(`Name`) values (?), (?)", "Tom", "Sam").Exec()
+	err := engine.Migrate(&User{})
+	if err != nil {
+		//log.Printf("迁移数据库错误信息: %v", err)
+		logger.Error("迁移数据库错误信息: %v", err)
+	}
+	rows, _ := s.Raw("SELECT * FROM User").QueryRows()
+	columns, _ := rows.Columns()
+	logger.InfoF("获取到的字段为 %v", columns)
+	if !reflect.DeepEqual(columns, []string{"Name", "Age"}) {
+		log.Printf("迁移数据库失败，获取到的字段为: %v", columns)
+	}
+
 }
 
 // go test -v -run TestEngine_Transaction

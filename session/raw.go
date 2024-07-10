@@ -3,7 +3,7 @@ package session
 import (
 	"GeeORM/clause"
 	"GeeORM/dialect"
-	"GeeORM/log"
+	"GeeORM/logger"
 	"GeeORM/schema"
 	"database/sql"
 	"strings"
@@ -61,9 +61,9 @@ func (s *Session) Raw(sql string, values ...any) *Session {
 // Exec 执行原始 sql
 func (s *Session) Exec() (result sql.Result, err error) {
 	defer s.Clear()
-	log.Info(s.sql.String(), s.sqlVars)
+	logger.Info(s.sql.String(), s.sqlVars)
 	if result, err = s.DB().Exec(s.sql.String(), s.sqlVars...); err != nil {
-		log.Error(err)
+		logger.Error(err)
 	}
 	return
 }
@@ -71,16 +71,16 @@ func (s *Session) Exec() (result sql.Result, err error) {
 // QueryRow 从数据库获取一条记录
 func (s *Session) QueryRow() *sql.Row {
 	defer s.Clear()
-	log.Info(s.sql.String(), s.sqlVars)
+	logger.Info(s.sql.String(), s.sqlVars)
 	return s.DB().QueryRow(s.sql.String(), s.sqlVars...)
 }
 
 // QueryRows 从数据库获取记录列表
 func (s *Session) QueryRows() (rows *sql.Rows, err error) {
 	defer s.Clear()
-	log.Info(s.sql.String(), s.sqlVars)
+	logger.Info(s.sql.String(), s.sqlVars)
 	if rows, err = s.DB().Query(s.sql.String(), s.sqlVars...); err != nil {
-		log.Error(err)
+		logger.Error(err)
 	}
 	return
 }
