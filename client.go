@@ -9,6 +9,7 @@ import (
 	"log"
 	"net"
 	"sync"
+	"time"
 )
 
 // Call 代表一个rpc的开始
@@ -89,7 +90,7 @@ func parseOptions(opts ...*Option) (*Option, error) {
 
 // Dial 连接到指定网络地址的 RPC 服务器
 func Dial(network, address string, opts ...*Option) (client *Client, err error) {
-	opt, err := parseOptions(opts...)
+	/*opt, err := parseOptions(opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -104,6 +105,8 @@ func Dial(network, address string, opts ...*Option) (client *Client, err error) 
 		}
 	}()
 	return NewClient(conn, opt)
+	*/
+	return dialTimeout(NewClient, network, address, opts...)
 }
 
 func (c *Client) send(call *Call) {
@@ -153,10 +156,25 @@ func (c *Client) Go(serviceMethod string, args, reply any, done chan *Call) *Cal
 	return call
 }
 
-// Call 调用指定函数，等待其完成, 并返回其错误状态。
-func (c *Client) Call(serviceMethod string, args, reply any) error {
-	// Call 是对 Go 的封装，阻塞 call.Done，等待响应返回，是一个同步接口。
-	log.Println("服务名: ", serviceMethod, args, reply)
+// Call 超时处理机制，使用 context 包实现，控制权交给用户，控制更为灵活
+// 调用指定函数，等待其完成, 并返回其错误状态
+//
+//	func (c *Client) Call(ctx context.Context, serviceMethod string, args, reply any) error {
+//		/*
+//			ctx: 用户可以设置 context.WithTimeout 来自定义超时时间
+//		*/
+//		call := c.Go(serviceMethod, args, reply, make(chan *Call, 1))
+//		log.Println("服务名: ", serviceMethod, args, reply)
+//		select {
+//		case <-ctx.Done(): // 超时将执行这里
+//			c.removeCall(call.Seq)
+//			return errors.New("rpc 客户端：调用失败: " + ctx.Err().Error())
+//		case call := <-call.Done:
+//			return call.Error
+//		}
+//
+// }
+func (c *Client) Call(serviceMethod string, args, reply interface{}) error {
 	call := <-c.Go(serviceMethod, args, reply, make(chan *Call, 1)).Done
 	return call.Error
 }
@@ -254,4 +272,48 @@ func (c *Client) receive() {
 	log.Println("发生错误，因此终止呼叫待处理的呼叫: ", err)
 	// 发生错误，因此终止呼叫待处理的呼叫
 	c.terminateCalls(err)
+}
+
+type clientResult struct {
+	client *Client
+	err    error
+}
+
+type newClientFunc func(conn net.Conn, opt *Option) (client *Client, err error)
+
+func dialTimeout(f newClientFunc, network, address string, opts ...*Option) (client *Client, err error) {
+	/*
+		f:NewClient
+	*/
+	opt, err := parseOptions(opts...)
+	if err != nil {
+		return nil, err
+	}
+	// 将 net.Dial 替换为 net.DialTimeout，如果连接创建超时，将返回错误
+	conn, err := net.DialTimeout(network, address, opt.ConnectTimeout)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if err != nil {
+			_ = conn.Close()
+		}
+	}()
+	ch := make(chan clientResult)
+	go func() {
+		client, err = f(conn, opt)
+		ch <- clientResult{client: client, err: err}
+	}()
+	if opt.ConnectTimeout == 0 {
+		result := <-ch
+		return result.client, result.err
+	}
+	select {
+	// time.After 用于在指定的时间段之后发送一个事件
+	case <-time.After(opt.ConnectTimeout):
+		// 如果 time.After() 信道先接收到消息，则说明 NewClient 执行超时，返回错误
+		return nil, fmt.Errorf("rpc 客户端：连接超时：预计在 %s", opt.ConnectTimeout)
+	case result := <-ch:
+		return result.client, result.err
+	}
 }
