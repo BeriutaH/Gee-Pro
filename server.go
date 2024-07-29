@@ -4,6 +4,7 @@ import (
 	"GeeRPC/codec"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"go/ast"
 	"io"
 	"log"
@@ -214,7 +215,7 @@ func (server *Server) serveCodec(cc codec.Codec) {
 		// 增加等待组的计数
 		wg.Add(1)
 		// 异步处理请求
-		go server.handleRequest(cc, req, sending, wg)
+		//go server.handleRequest(cc, req, sending, wg)
 	}
 	// 等待所有请求处理完毕
 	wg.Wait()
@@ -261,16 +262,38 @@ func (server *Server) sendResponse(cc codec.Codec, h *codec.Header, body any, se
 	}
 }
 
-// handleRequest 处理请求
-func (server *Server) handleRequest(cc codec.Codec, req *request, sending *sync.Mutex, wg *sync.WaitGroup) {
+// handleRequest 处理请求 确保 sendResponse 仅调用一次
+func (server *Server) handleRequest(cc codec.Codec, req *request, sending *sync.Mutex, wg *sync.WaitGroup, timeout time.Duration) {
 	defer wg.Done() // 这相当于 wg.Add(-1)，将计数器减 1
-	err := req.svc.call(req.mType, req.argV, req.replyV)
-	if err != nil {
-		req.h.Error = err.Error()
-		server.sendResponse(cc, req.h, invalidRequest, sending)
+	called := make(chan struct{})
+	sent := make(chan struct{})
+	go func() {
+		err := req.svc.call(req.mType, req.argV, req.replyV)
+		called <- struct{}{}
+		if err != nil {
+			req.h.Error = err.Error()
+			server.sendResponse(cc, req.h, invalidRequest, sending)
+			sent <- struct{}{}
+			return
+		}
+		//called 信道接收到消息，代表处理没有超时，继续执行 sendResponse
+		server.sendResponse(cc, req.h, req.replyV.Interface(), sending)
+		sent <- struct{}{}
+	}()
+	if timeout == 0 {
+		<-called
+		<-sent
 		return
 	}
-	server.sendResponse(cc, req.h, req.replyV.Interface(), sending)
+	select {
+	//  time.After(timeout 先于 called 接收到消息，说明处理已经超时，called 和 sent 都将被阻塞
+	// 在 case <-time.After(timeout) 处调用 sendResponse
+	case <-time.After(timeout):
+		req.h.Error = fmt.Sprintf("rpc 服务器: 请求处理超时: 预计在 %s 内", timeout)
+		server.sendResponse(cc, req.h, invalidRequest, sending)
+	case <-called:
+		<-sent
+	}
 }
 
 func (server *Server) readRequestHeader(cc codec.Codec) (*codec.Header, error) {
@@ -300,7 +323,7 @@ func Register(rcvr any) error {
 
 // findService 通过 ServiceMethod 从 serviceMap 中找到对应的 service
 func (server *Server) findService(serviceMethod string) (svc *service, mType *methodType, err error) {
-	dot := strings.LastIndex(serviceMethod, ".")
+	dot := strings.LastIndex(serviceMethod, ".") // 返回最后一个点所在的索引
 	if dot < 0 {
 		err = errors.New("rpc 服务器: 服务/方法请求格式错误 " + serviceMethod)
 		return

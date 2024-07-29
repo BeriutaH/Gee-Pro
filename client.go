@@ -2,6 +2,7 @@ package GeeRPC
 
 import (
 	"GeeRPC/codec"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -158,25 +159,20 @@ func (c *Client) Go(serviceMethod string, args, reply any, done chan *Call) *Cal
 
 // Call 超时处理机制，使用 context 包实现，控制权交给用户，控制更为灵活
 // 调用指定函数，等待其完成, 并返回其错误状态
-//
-//	func (c *Client) Call(ctx context.Context, serviceMethod string, args, reply any) error {
-//		/*
-//			ctx: 用户可以设置 context.WithTimeout 来自定义超时时间
-//		*/
-//		call := c.Go(serviceMethod, args, reply, make(chan *Call, 1))
-//		log.Println("服务名: ", serviceMethod, args, reply)
-//		select {
-//		case <-ctx.Done(): // 超时将执行这里
-//			c.removeCall(call.Seq)
-//			return errors.New("rpc 客户端：调用失败: " + ctx.Err().Error())
-//		case call := <-call.Done:
-//			return call.Error
-//		}
-//
-// }
-func (c *Client) Call(serviceMethod string, args, reply interface{}) error {
-	call := <-c.Go(serviceMethod, args, reply, make(chan *Call, 1)).Done
-	return call.Error
+func (c *Client) Call(ctx context.Context, serviceMethod string, args, reply any) error {
+	/*
+		ctx: 用户可以设置 context.WithTimeout 来自定义超时时间
+	*/
+	call := c.Go(serviceMethod, args, reply, make(chan *Call, 1))
+	log.Println("服务名: ", serviceMethod, args, reply)
+	select {
+	case <-ctx.Done(): // 超时将执行这里
+		c.removeCall(call.Seq)
+		return errors.New("rpc 客户端：调用失败: " + ctx.Err().Error())
+	case call = <-call.Done:
+		return call.Error
+	}
+
 }
 
 func (c *Client) Close() error {
