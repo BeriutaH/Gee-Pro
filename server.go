@@ -9,10 +9,10 @@ import (
 	"io"
 	"log"
 	"net"
+	"net/http"
 	"reflect"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 )
 
@@ -21,7 +21,12 @@ import (
 //| Option{MagicNumber: xxx, CodecType: xxx} | Header{ServiceMethod ...} | Body interface{} |
 //| <------      固定 JSON 编码      ------>  | <-------   编码方式由 CodeType 决定   ------->  |
 
-const MagicNumber = 0x3bef5c
+const (
+	MagicNumber      = 0x3bef5c
+	connected        = "200 Connected to Gee RPC"
+	defaultRPCPath   = "/_geeprc_"
+	defaultDebugPath = "/debug/geerpc"
+)
 
 type Option struct {
 	MagicNumber    int           // 标记这是一个 geerpc 请求
@@ -31,8 +36,9 @@ type Option struct {
 }
 
 var DefaultOption = &Option{
-	MagicNumber: MagicNumber,
-	CodecType:   codec.GobType,
+	MagicNumber:    MagicNumber,
+	CodecType:      codec.GobType,
+	ConnectTimeout: time.Second * 10,
 }
 var invalidRequest = struct{}{}
 
@@ -44,106 +50,9 @@ type request struct {
 	svc          *service
 }
 
-type methodType struct {
-	method    reflect.Method // 方法本身
-	ArgType   reflect.Type   // 第一个参数的类型
-	ReplyType reflect.Type   // 第二个参数的类型
-	numCalls  uint64         // 后续统计方法调用次数
-}
-
-func (m *methodType) NumCalls() uint64 {
-	return atomic.LoadUint64(&m.numCalls)
-}
-
-func (m *methodType) newArgv() reflect.Value {
-	var argv reflect.Value
-	//  检查 ArgType 是否是指针类型
-	if m.ArgType.Kind() == reflect.Ptr {
-		// 获取指针所指向的元素类型，并创建一个新的该类型的值
-		argv = reflect.New(m.ArgType.Elem())
-	} else {
-		// 创建一个新的 ArgType 类型的值，并调用 Elem() 方法获取指针指向的具体值
-		argv = reflect.New(m.ArgType).Elem()
-	}
-	return argv
-}
-
-func (m *methodType) newReplyV() reflect.Value {
-	replyV := reflect.New(m.ReplyType.Elem())
-	switch m.ReplyType.Elem().Kind() {
-	case reflect.Map:
-		replyV.Elem().Set(reflect.MakeMap(m.ReplyType.Elem()))
-	case reflect.Slice:
-		replyV.Elem().Set(reflect.MakeSlice(m.ReplyType.Elem(), 0, 0))
-	default:
-		log.Println("未处理的默认情况")
-	}
-	return replyV
-}
-
-type service struct {
-	name   string                 // 映射的结构体的名称
-	typ    reflect.Type           // 结构体的类型
-	rcvr   reflect.Value          // 结构体的实例本身
-	method map[string]*methodType // 存储映射的结构体的所有符合条件的方法
-}
-
-func (s *service) registerMethods() {
-	/*
-		两个导出或内置类型的入参（反射时为 3 个，第 0 个是自身）
-		返回值有且只有 1 个，类型为 error
-	*/
-	s.method = make(map[string]*methodType)
-	for i := 0; i < s.typ.NumMethod(); i++ {
-		method := s.typ.Method(i)
-		mType := method.Type
-		// NumIn 获取入参个数， NumOut 获取输出参数个数
-		if mType.NumIn() != 3 || mType.NumOut() != 1 {
-			continue
-		}
-		// 检查方法或函数的第一个返回值类型是否为 error
-		if mType.Out(0) != reflect.TypeOf((*error)(nil)).Elem() {
-			continue
-		}
-		argType, replyType := mType.In(1), mType.In(2)
-		if !isExportedOrBuiltinType(argType) || !isExportedOrBuiltinType(replyType) {
-			continue
-		}
-		s.method[method.Name] = &methodType{
-			method:    method,
-			ArgType:   argType,
-			ReplyType: replyType,
-		}
-		log.Printf("rpc 服务器：注册 %s.%s\n", s.name, method.Name)
-	}
-}
-
-func (s *service) call(m *methodType, argv, replyV reflect.Value) error {
-	atomic.AddUint64(&m.numCalls, 1)
-	f := m.method.Func // 获取方法
-	// Call 调用方法，3个参数，第一个是实例本身
-	returnValues := f.Call([]reflect.Value{s.rcvr, argv, replyV})
-	if errInter := returnValues[0].Interface(); errInter != nil {
-		return errInter.(error)
-	}
-	return nil
-}
-
 // isExportedOrBuiltinType 是导出(大写字母开头)还是内置类型
 func isExportedOrBuiltinType(t reflect.Type) bool {
 	return ast.IsExported(t.Name()) || t.PkgPath() == ""
-}
-
-func newService(rcvr any) *service {
-	s := new(service)
-	s.rcvr = reflect.ValueOf(rcvr)
-	s.name = reflect.Indirect(s.rcvr).Type().Name()
-	s.typ = reflect.TypeOf(rcvr)
-	if !ast.IsExported(s.name) {
-		log.Fatalf("rpc 服务器: %s 不是有效的服务名称", s.name)
-	}
-	s.registerMethods()
-	return s
 }
 
 type Server struct {
@@ -189,10 +98,10 @@ func (server *Server) ServeConn(conn io.ReadWriteCloser) {
 		log.Println("rpc 服务器: 编解码器类型: ", opt.CodecType)
 		return
 	}
-	server.serveCodec(f(conn))
+	server.serveCodec(f(conn), &opt)
 }
 
-func (server *Server) serveCodec(cc codec.Codec) {
+func (server *Server) serveCodec(cc codec.Codec, opt *Option) {
 	// TODO 处理请求是并发的，但是回复请求的报文必须是逐个发送的，并发容易导致多个回复报文交织在一起，客户端无法解析，使用互斥锁(sending)保证
 	sending := new(sync.Mutex)
 	// 创建一个等待组，用于等待所有请求处理完毕后再关闭连接
@@ -215,12 +124,12 @@ func (server *Server) serveCodec(cc codec.Codec) {
 		// 增加等待组的计数
 		wg.Add(1)
 		// 异步处理请求
+		go server.handleRequest(cc, req, sending, wg, opt.HandleTimeout)
 		//go server.handleRequest(cc, req, sending, wg)
 	}
 	// 等待所有请求处理完毕
 	wg.Wait()
 	cc.Close()
-
 }
 
 // readRequest 读取请求
@@ -341,4 +250,34 @@ func (server *Server) findService(serviceMethod string) (svc *service, mType *me
 	return
 }
 
+// ServeHTTP 实现一个 http.Handler 来响应 RPC 请求
+func (server *Server) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+	if req.Method != "CONNECT" {
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		_, _ = io.WriteString(w, "405 必须连接\n")
+		return
+	}
+	conn, _, err := w.(http.Hijacker).Hijack()
+	if err != nil {
+		log.Print("rpc hijacking ", req.RemoteAddr, ": ", err.Error())
+		return
+	}
+	_, _ = io.WriteString(conn, "HTTP/1.0 "+connected+"\n\n")
+	server.ServeConn(conn)
+}
+
+// HandleHTTP 在 rpcPath 上注册一个用于 RPC 消息的 HTTP 处理程序
+// 仍然需要调用 http.Serve()，通常在 go 语句中
+func (server *Server) HandleHTTP() {
+	// 两个参数
+	http.Handle(defaultRPCPath, server) // 一个是pattern: /_geeprc_, 一个是handler，实现ServeHTTP方法的接口Handler类型
+	http.Handle(defaultDebugPath, debugHTTP{server})
+	log.Println("rpc服务器调试路径: ", defaultDebugPath)
+}
+
+// HandleHTTP 是默认服务器注册 HTTP 处理程序的一种便捷方式
+func HandleHTTP() {
+	DefaultServer.HandleHTTP()
+}
 func Accept(lis net.Listener) { DefaultServer.Accept(lis) }

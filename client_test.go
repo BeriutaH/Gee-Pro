@@ -2,7 +2,10 @@ package GeeRPC
 
 import (
 	"context"
+	"log"
 	"net"
+	"os"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -55,4 +58,24 @@ func TestClient_Call(t *testing.T) {
 		err := client.Call(ctx, "Bar.Timeout", 1, &reply)
 		_assert(err != nil && strings.Contains(err.Error(), ctx.Err().Error()), "expect a timeout error")
 	})
+}
+
+func TestXDial(t *testing.T) {
+	if runtime.GOOS == "darwin" {
+		ch := make(chan struct{})
+		addr := "/tmp/geerpc.sock"
+		go func() {
+			// net.Listen 监听 unix socket 时，会创建这个文件。如果这个文件存在，可能会监听失败，监听前删除比较安全
+			_ = os.Remove(addr)
+			l, err := net.Listen("unix", addr)
+			if err != nil {
+				log.Println("监听 unix 套接字失败")
+			}
+			ch <- struct{}{}
+			Accept(l)
+		}()
+		<-ch
+		_, err := XDial("unix@" + addr)
+		_assert(err == nil, "failed to connect unix socket")
+	}
 }

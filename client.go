@@ -2,6 +2,7 @@ package GeeRPC
 
 import (
 	"GeeRPC/codec"
+	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
@@ -9,6 +10,8 @@ import (
 	"io"
 	"log"
 	"net"
+	"net/http"
+	"strings"
 	"sync"
 	"time"
 )
@@ -91,22 +94,6 @@ func parseOptions(opts ...*Option) (*Option, error) {
 
 // Dial 连接到指定网络地址的 RPC 服务器
 func Dial(network, address string, opts ...*Option) (client *Client, err error) {
-	/*opt, err := parseOptions(opts...)
-	if err != nil {
-		return nil, err
-	}
-	conn, err := net.Dial(network, address)
-	if err != nil {
-		return nil, err
-	}
-	// 这里判断如果客户端出现nil，将关闭连接
-	defer func() {
-		if err != nil {
-			_ = conn.Close()
-		}
-	}()
-	return NewClient(conn, opt)
-	*/
 	return dialTimeout(NewClient, network, address, opts...)
 }
 
@@ -152,7 +139,7 @@ func (c *Client) Go(serviceMethod string, args, reply any, done chan *Call) *Cal
 		Reply:         reply,
 		Done:          done,
 	}
-	log.Printf("call 结构体: %+v", call)
+	//log.Printf("call 结构体: %+v", call)
 	c.send(call)
 	return call
 }
@@ -164,7 +151,7 @@ func (c *Client) Call(ctx context.Context, serviceMethod string, args, reply any
 		ctx: 用户可以设置 context.WithTimeout 来自定义超时时间
 	*/
 	call := c.Go(serviceMethod, args, reply, make(chan *Call, 1))
-	log.Println("服务名: ", serviceMethod, args, reply)
+	//log.Println("服务名: ", serviceMethod, args, reply)
 	select {
 	case <-ctx.Done(): // 超时将执行这里
 		c.removeCall(call.Seq)
@@ -185,6 +172,7 @@ func (c *Client) Close() error {
 	return c.cc.Close()
 }
 
+// IsAvailable 检查是否可用
 func (c *Client) IsAvailable() bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -278,9 +266,6 @@ type clientResult struct {
 type newClientFunc func(conn net.Conn, opt *Option) (client *Client, err error)
 
 func dialTimeout(f newClientFunc, network, address string, opts ...*Option) (client *Client, err error) {
-	/*
-		f:NewClient
-	*/
 	opt, err := parseOptions(opts...)
 	if err != nil {
 		return nil, err
@@ -311,5 +296,53 @@ func dialTimeout(f newClientFunc, network, address string, opts ...*Option) (cli
 		return nil, fmt.Errorf("rpc 客户端：连接超时：预计在 %s", opt.ConnectTimeout)
 	case result := <-ch:
 		return result.client, result.err
+	}
+}
+
+// NewHTTPClient 通过 HTTP 作为传输协议新建一个客户端实例
+func NewHTTPClient(conn net.Conn, opt *Option) (*Client, error) {
+	/*
+		conn: 是一个实现了 io.Reader 接口的连接对象
+	*/
+	// io.WriteString 向 conn（一个实现了 io.Writer 接口的对象）写入字符串
+	reqStr := fmt.Sprintf("CONNECT %s HTTP/1.0\r\n\r\n", defaultRPCPath)
+	_, _ = io.WriteString(conn, reqStr)
+	// 切换到 RPC 协议之前需要成功的 HTTP 响应，bufio.NewReader 创建一个带缓冲的读取器
+	resp, err := http.ReadResponse(bufio.NewReader(conn), &http.Request{Method: "CONNECT"})
+	if resp == nil {
+		log.Println("创建缓冲读取器出错了: ", err)
+	}
+	if err == nil && resp.Status == connected {
+		return NewClient(conn, opt)
+	}
+	if err == nil {
+		err = errors.New("意外的 HTTP 响应: " + resp.Status)
+	}
+	return nil, err
+}
+
+// DialHTTP 连接到指定网络地址的 HTTP RPC 服务器，监听默认的 HTTP RPC 路径
+func DialHTTP(network, address string, opts ...*Option) (*Client, error) {
+	return dialTimeout(NewHTTPClient, network, address, opts...)
+}
+
+// XDial 根据第一个参数 rpcAddr 调用不同的函数来连接 RPC 服务器
+func XDial(rpcAddr string, opts ...*Option) (*Client, error) {
+	/*
+		rpcAddr: 是一种通用格式 (protocol@addr)，用于表示 rpc 服务器
+		例如: http@10.0.0.1:7001、tcp@10.0.0.1:9999、unix@/tmp/geerpc.sock
+	*/
+	log.Println("获取的rpc地址: ", rpcAddr)
+	parts := strings.Split(rpcAddr, "@")
+	if len(parts) != 2 {
+		return nil, fmt.Errorf("rpc 客户端错误: 格式错误: %s, 正确格式为: protocol@addr ", rpcAddr)
+	}
+	protocol, addr := parts[0], parts[1]
+	switch protocol {
+	case "http":
+		return DialHTTP("tcp", addr, opts...)
+	default:
+		// tcp、unix 或其他传输协议
+		return Dial(protocol, addr, opts...)
 	}
 }
