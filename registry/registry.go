@@ -26,7 +26,7 @@ type GeeRegistry struct {
 const (
 	defaultPath    = "/_geerpc_/registry"
 	defaultTimeout = time.Minute * 5
-	defaultHeader  = "X-Geerpc-Servers"
+	DefaultHeader  = "X-Geerpc-Servers"
 )
 
 // New 新建一个具有超时设置的注册表实例
@@ -73,9 +73,9 @@ func (r *GeeRegistry) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	switch req.Method {
 	case "GET":
 		// 保持简单，服务器在 req.Header 中
-		w.Header().Set(defaultHeader, strings.Join(r.aliveServers(), ","))
+		w.Header().Set(DefaultHeader, strings.Join(r.aliveServers(), ","))
 	case "POST":
-		addr := req.Header.Get(defaultHeader)
+		addr := req.Header.Get(DefaultHeader)
 		if addr == "" {
 			w.WriteHeader(http.StatusInternalServerError)
 			return
@@ -115,7 +115,7 @@ func sendHeartbeat(registry string, addr string) error {
 	log.Println(addr, "心跳注册: ", registry)
 	httpClient := &http.Client{}
 	req, _ := http.NewRequest("POST", registry, nil)
-	req.Header.Set(defaultHeader, addr)
+	req.Header.Set(DefaultHeader, addr)
 	if _, err := httpClient.Do(req); err != nil {
 		log.Println("rpc server: 心跳错误: ", err)
 		return err

@@ -2,10 +2,12 @@ package main
 
 import (
 	geerpc "GeeRPC"
+	"GeeRPC/registry"
 	"GeeRPC/xclient"
 	"context"
 	"log"
 	"net"
+	"net/http"
 	"sync"
 	"time"
 )
@@ -25,7 +27,7 @@ func (f Foo) Sleep(args Args, reply *int) error {
 	return nil
 }
 
-func startServer(addr chan string) {
+func startServer(addr string, wg *sync.WaitGroup) {
 	var foo Foo
 	//if err := geerpc.Register(&foo); err != nil {
 	//	log.Println("register error:", err)
@@ -45,9 +47,19 @@ func startServer(addr chan string) {
 	l, _ := net.Listen("tcp", ":0")
 	server := geerpc.NewServer()
 	_ = server.Register(&foo)
-	addr <- l.Addr().String() // 将服务器的地址存进管道中
+	//addr <- l.Addr().String() // 将服务器的地址存进管道中
+	// 添加函数 startRegistry，稍微修改 startServer，添加调用注册中心的 Heartbeat 方法的逻辑，定期向注册中心发送心跳保活
+	registry.Heartbeat(addr, "tcp@"+l.Addr().String(), 0)
+	wg.Done()
 	server.Accept(l)
 
+}
+
+func startRegistry(wg *sync.WaitGroup) {
+	l, _ := net.Listen("tcp", ":9999")
+	registry.HandleHTTP()
+	wg.Done()
+	_ = http.Serve(l, nil)
 }
 
 func foo(xc *xclient.XClient, ctx context.Context, typ, serviceMethod string, args *Args) {
@@ -67,7 +79,7 @@ func foo(xc *xclient.XClient, ctx context.Context, typ, serviceMethod string, ar
 }
 
 // call 调用单个实例
-func call(addr1, addr2 string) {
+func call(registry string) {
 	//// addrCh 是一个无缓冲的通道，必须等到startServer(addr)执行完成，即服务器启动了才有值（服务器的地址）
 	//client, _ := geerpc.DialHTTP("tcp", <-addrCh)
 	//log.Println("创建连接 TCP")
@@ -88,7 +100,7 @@ func call(addr1, addr2 string) {
 	//	}(i)
 	//}
 	//wg.Wait()
-	d := xclient.NewMultiServerDiscovery([]string{"tcp@" + addr1, "tcp@" + addr2})
+	d := xclient.NewGeeRegistryDiscovery(registry, 0)
 	xc := xclient.NewXClient(d, xclient.RandomSelect, nil)
 	defer xc.Close()
 	// 发送请求并接收响应
@@ -104,8 +116,8 @@ func call(addr1, addr2 string) {
 }
 
 // broadcast 调用所有服务实例
-func broadcast(addr1, addr2 string) {
-	d := xclient.NewMultiServerDiscovery([]string{"tcp@" + addr1, "tcp@" + addr2})
+func broadcast(registry string) {
+	d := xclient.NewGeeRegistryDiscovery(registry, 0)
 	xc := xclient.NewXClient(d, xclient.RandomSelect, nil)
 	defer xc.Close()
 	// 发送请求并接收响应
@@ -125,19 +137,19 @@ func broadcast(addr1, addr2 string) {
 
 func main() {
 	log.SetFlags(0)
-	ch1 := make(chan string)
-	ch2 := make(chan string)
-	go startServer(ch1)
-	go startServer(ch2)
-	addr1 := <-ch1
-	addr2 := <-ch2
+	registryAddr := "http://localhost:9999/_geerpc_/registry"
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go startRegistry(&wg)
+	wg.Wait()
+
+	time.Sleep(time.Second) // 确保注册中心启动后，再启动 RPC 服务端
+	wg.Add(2)
+	go startServer(registryAddr, &wg)
+	go startServer(registryAddr, &wg)
+	wg.Wait()
 
 	time.Sleep(time.Second)
-	call(addr1, addr2)
-	broadcast(addr1, addr2)
-	//println("-------start--------")
-	//go call(ch) // 协程的方式执行call, 等待服务器启动再接收addr来进行调用
-	//println("--------end-------")
-	//startServer(ch)
-
+	call(registryAddr)
+	broadcast(registryAddr)
 }
