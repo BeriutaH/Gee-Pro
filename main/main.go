@@ -5,7 +5,6 @@ import (
 	"GeeRPC/registry"
 	"GeeRPC/xclient"
 	"context"
-	"fmt"
 	"log"
 	"net"
 	"net/http"
@@ -153,5 +152,4 @@ func main() {
 	time.Sleep(time.Second)
 	call(registryAddr)
 	broadcast(registryAddr)
-	fmt.Println("测试")
 }
